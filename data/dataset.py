@@ -1,6 +1,6 @@
 import os
 import numpy as np
-
+os.environ['datapath']="/home/innox/ghz_ws/HDMapNet"
 import torch
 from PIL import Image
 from pyquaternion import Quaternion
@@ -30,7 +30,7 @@ class HDMapNetDataset(Dataset):
         self.canvas_size = (canvas_h, canvas_w)
         self.nusc = NuScenes(version=version, dataroot=dataroot, verbose=False)
         self.vector_map = VectorizedLocalMap(dataroot, patch_size=self.patch_size, canvas_size=self.canvas_size)
-        self.scenes = self.get_scenes(version, is_train)
+        self.scenes = self.get_scenes(version, is_train) # 场景数据编号scenes, eg: ['scene-0103', 'scene-0916']
         self.samples = self.get_samples()
 
     def __len__(self):
@@ -46,6 +46,9 @@ class HDMapNetDataset(Dataset):
         return create_splits_scenes()[split]
 
     def get_samples(self):
+        '''
+        获得所有数据，并存储在一个列表里
+        '''
         samples = [samp for samp in self.nusc.sample]
 
         # remove samples that aren't in this split
@@ -111,6 +114,9 @@ class HDMapNetDataset(Dataset):
 
 
     def get_imgs(self, rec):
+        '''
+        从sample的dict中读取出参数
+        '''
         imgs = []
         trans = []
         rots = []
@@ -146,7 +152,7 @@ class HDMapNetDataset(Dataset):
         return vectors
 
     def __getitem__(self, idx):
-        rec = self.samples[idx]
+        rec = self.samples[idx] # 获取对应idx的sample
         imgs, trans, rots, intrins, post_trans, post_rots = self.get_imgs(rec)
         lidar_data, lidar_mask = self.get_lidar(rec)
         car_trans, yaw_pitch_roll = self.get_ego_pose(rec)
@@ -164,8 +170,13 @@ class HDMapNetSemanticDataset(HDMapNetDataset):
     def get_semantic_map(self, rec):
         vectors = self.get_vectors(rec)
         instance_masks, forward_masks, backward_masks = preprocess_map(vectors, self.patch_size, self.canvas_size, NUM_CLASSES, self.thickness, self.angle_class)
-        semantic_masks = instance_masks != 0
+        semantic_masks = instance_masks != 0 # 把semantic信息变成0,1，只有车道线前景和背景信息
+        # print("1:", semantic_masks.shape)
+        # print(torch.any(semantic_masks, axis=0).shape)
         semantic_masks = torch.cat([(~torch.any(semantic_masks, axis=0)).unsqueeze(0), semantic_masks])
+        # print("2:", semantic_masks.shape)
+        # input()
+        
         instance_masks = instance_masks.sum(0)
         forward_oh_masks = label_onehot_encoding(forward_masks, self.angle_class+1)
         backward_oh_masks = label_onehot_encoding(backward_masks, self.angle_class+1)
@@ -174,7 +185,9 @@ class HDMapNetSemanticDataset(HDMapNetDataset):
         return semantic_masks, instance_masks, forward_masks, backward_masks, direction_masks
 
     def __getitem__(self, idx):
-        rec = self.samples[idx]
+        rec = self.samples[idx] # sample原始数据
+        # print(f"s: {rec}")
+        # input()
         imgs, trans, rots, intrins, post_trans, post_rots = self.get_imgs(rec)
         lidar_data, lidar_mask = self.get_lidar(rec)
         car_trans, yaw_pitch_roll = self.get_ego_pose(rec)
@@ -199,8 +212,9 @@ if __name__ == '__main__':
         'thickness': 5,
         'angle_class': 36,
     }
+    dataroot = '/home/innox/Dataset/nuscense-mini/mini'
 
-    dataset = HDMapNetSemanticDataset(version='v1.0-mini', dataroot='dataset/nuScenes', data_conf=data_conf, is_train=False)
+    dataset = HDMapNetSemanticDataset(version='v1.0-mini', dataroot=dataroot, data_conf=data_conf, is_train=False)
     for idx in range(dataset.__len__()):
         imgs, trans, rots, intrins, post_trans, post_rots, lidar_data, lidar_mask, car_trans, yaw_pitch_roll, semantic_masks, instance_masks, direction_mask = dataset.__getitem__(idx)
 

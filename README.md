@@ -20,6 +20,10 @@ Please file an [issue](https://github.com/Tsinghua-MARS-Lab/HDMapNet-dev/issues)
 2. Install dependencies by running
 ```
 pip install -r requirement.txt
+
+# pytorch1.8.0，CUDA11.2
+sudo /home/innox/anaconda3/envs/fiery/bin/python3.7 -m pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.8.0+cu112.html
+
 ```
 
 3. Install pytorch from `https://pytorch.org/get-started/locally/`

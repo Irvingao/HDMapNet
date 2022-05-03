@@ -291,7 +291,10 @@ class IPM(nn.Module):
         else:
             warped_topdown, _ = warped_fv_images.max(1)
             warped_topdown = warped_topdown.permute(0, 3, 1, 2).contiguous()
+            # print(f"1: {warped_topdown.shape}")
             warped_topdown = warped_topdown.view(B, C, self.h, self.w)
+            # print(f"2: {warped_topdown.shape}")
+            # input()
             return warped_topdown
 
 

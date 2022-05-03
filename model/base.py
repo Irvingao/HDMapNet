@@ -23,17 +23,20 @@ class Up(nn.Module):
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
-        x1 = torch.cat([x2, x1], dim=1)
+        x1 = torch.cat([x2, x1], dim=1) # C上叠加
         return self.conv(x1)
 
 
 class CamEncode(nn.Module):
+    '''
+    Bachbone
+    '''
     def __init__(self, C):
         super(CamEncode, self).__init__()
         self.C = C
 
-        self.trunk = EfficientNet.from_pretrained("efficientnet-b0")
-        self.up1 = Up(320+112, self.C)
+        self.trunk = EfficientNet.from_pretrained("efficientnet-b0") # Backbone主干
+        self.up1 = Up(320+112, self.C) # 上采样
 
     def get_eff_depth(self, x):
         # adapted from https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/efficientnet_pytorch/model.py#L231
@@ -110,6 +113,8 @@ class BevEncode(nn.Module):
             )
 
     def forward(self, x):
+        # print(f"1: {x.shape}")
+
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -117,8 +122,10 @@ class BevEncode(nn.Module):
         x1 = self.layer1(x)
         x = self.layer2(x1)
         x2 = self.layer3(x)
+        # print(f"2: {x.shape}")
 
         x = self.up1(x2, x1)
+        
         x = self.up2(x)
 
         if self.instance_seg:
@@ -132,5 +139,7 @@ class BevEncode(nn.Module):
             x_direction = self.up2_direction(x_direction)
         else:
             x_direction = None
-
+        
+        # print(f"3: {x.shape}")
+        # input()
         return x, x_embedded, x_direction

@@ -33,6 +33,8 @@ def get_lidar_data(nusc, sample_rec, nsweeps, min_distance):
     for _ in range(nsweeps):
         # Load up the pointcloud and remove points close to the sensor.
         current_pc = LidarPointCloud.from_file(os.path.join(nusc.dataroot, current_sd_rec['filename']))
+        # print(f"current_pc{current_pc}")
+        # input()
         current_pc.remove_close(min_distance)
 
         # Get past pose.

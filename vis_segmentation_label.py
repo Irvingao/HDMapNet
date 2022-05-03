@@ -57,10 +57,13 @@ def vis_label(dataroot, version, xbound, ybound, thickness, angle_class):
         if not os.path.exists(base_path):
             os.mkdir(base_path)
 
+        # print(semantic_mask.shape)
+        semantic_mask = np.array(semantic_mask)
         semantic_mask = semantic_mask.astype('uint8') * 255
         semantic_mask = np.moveaxis(semantic_mask, 0, -1)
         Image.fromarray(semantic_mask).save(semantic_path)
 
+        instance_mask = np.array(instance_mask)
         instance_mask = instance_mask.sum(0).astype('uint8')
         instance_color_mask = color_map[instance_mask].astype('uint8')
         Image.fromarray(instance_color_mask).save(instance_path)
@@ -101,7 +104,7 @@ def vis_label(dataroot, version, xbound, ybound, thickness, angle_class):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Local HD Map Demo.')
-    parser.add_argument('dataroot', type=str, default='dataset/nuScenes/')
+    parser.add_argument('--dataroot', type=str, default='/home/innox/Dataset/nuscenes-mini/mini')
     parser.add_argument('--version', type=str, default='v1.0-mini', choices=['v1.0-trainval', 'v1.0-mini'])
     parser.add_argument("--xbound", nargs=3, type=float, default=[-30.0, 30.0, 0.15])
     parser.add_argument("--ybound", nargs=3, type=float, default=[-15.0, 15.0, 0.15])

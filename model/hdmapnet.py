@@ -31,9 +31,9 @@ class ViewTransformation(nn.Module):
         feat = feat.view(B, N, C, H*W)
         outputs = []
         for i in range(N):
-            output = self.hw_mat[i](feat[:, i]).view(B, C, self.bv_size[0], self.bv_size[1])
+            output = self.hw_mat[i](feat[:, i]).view(B, C, self.bv_size[0], self.bv_size[1]) #分别对每层做’用全连接层做image-bv的变换
             outputs.append(output)
-        outputs = torch.stack(outputs, 1)
+        outputs = torch.stack(outputs, 1) # BNCHW
         return outputs
 
 
@@ -43,12 +43,12 @@ class HDMapNet(nn.Module):
         self.camC = 64
         self.downsample = 16
 
-        dx, bx, nx = gen_dx_bx(data_conf['xbound'], data_conf['ybound'], data_conf['zbound'])
-        final_H, final_W = nx[1].item(), nx[0].item()
-
+        dx, bx, nx = gen_dx_bx(data_conf['xbound'], data_conf['ybound'], data_conf['zbound']) 
+        final_H, final_W = nx[1].item(), nx[0].item() # BEV shape
+        # Encoder
         self.camencode = CamEncode(self.camC)
         fv_size = (data_conf['image_size'][0]//self.downsample, data_conf['image_size'][1]//self.downsample)
-        bv_size = (final_H//5, final_W//5)
+        bv_size = (final_H//5, final_W//5) 
         self.view_fusion = ViewTransformation(fv_size=fv_size, bv_size=bv_size)
 
         res_x = bv_size[1] * 3 // 4
@@ -57,7 +57,8 @@ class HDMapNet(nn.Module):
         self.ipm = IPM(ipm_xbound, ipm_ybound, N=6, C=self.camC, extrinsic=True)
         self.up_sampler = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         # self.up_sampler = nn.Upsample(scale_factor=5, mode='bilinear', align_corners=True)
-
+        
+        
         self.lidar = lidar
         if lidar:
             self.pp = PointPillarEncoder(128, data_conf['xbound'], data_conf['ybound'], data_conf['zbound'])
@@ -66,7 +67,7 @@ class HDMapNet(nn.Module):
             self.bevencode = BevEncode(inC=self.camC, outC=data_conf['num_channels'], instance_seg=instance_seg, embedded_dim=embedded_dim, direction_pred=direction_pred, direction_dim=direction_dim+1)
 
     def get_Ks_RTs_and_post_RTs(self, intrins, rots, trans, post_rots, post_trans):
-        B, N, _, _ = intrins.shape
+        B, N, _, _ = intrins.shape # 内参的shape
         Ks = torch.eye(4, device=intrins.device).view(1, 1, 4, 4).repeat(B, N, 1, 1)
 
         Rs = torch.eye(4, device=rots.device).view(1, 1, 4, 4).repeat(B, N, 1, 1)
@@ -87,6 +88,7 @@ class HDMapNet(nn.Module):
         return x
 
     def forward(self, img, trans, rots, intrins, post_trans, post_rots, lidar_data, lidar_mask, car_trans, yaw_pitch_roll):
+        # 1.Perspective view image encoder
         x = self.get_cam_feats(img)
         x = self.view_fusion(x)
         Ks, RTs, post_RTs = self.get_Ks_RTs_and_post_RTs(intrins, rots, trans, post_rots, post_trans)

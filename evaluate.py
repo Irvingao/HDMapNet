@@ -10,9 +10,23 @@ from model import get_model
 
 
 def onehot_encoding(logits, dim=1):
-    max_idx = torch.argmax(logits, dim, keepdim=True)
-    one_hot = logits.new_full(logits.shape, 0)
-    one_hot.scatter_(dim, max_idx, 1)
+    '''
+    logits: 未经softmax的feature map,[4, 4, 200, 400]
+    one_hot: 只填写有类别信息的feature map, [4, 4, 200, 400]
+    '''
+    # print("logits.shape:", logits.shape)
+    # print("logits:", logits)
+
+    max_idx = torch.argmax(logits, dim, keepdim=True) # 获取所有类别(n_classes)中概率最大的类别
+    one_hot = logits.new_full(logits.shape, 0) # 创建一个和logits大小相同的0矩阵
+    one_hot.scatter_(dim, max_idx, 1) # 将概率最大的索引对应的值填入one_hot
+    # print("max_idx.shape:", max_idx.shape)
+    # print("max_idx:", max_idx)
+    # print("one_hot.shape:", one_hot.shape)
+    # print("one_hot:", one_hot)
+    # print("logits.shape:", logits.shape)
+    # print("logits:", logits)
+    # input()
     return one_hot
 
 
@@ -50,7 +64,8 @@ def main(args):
     model = get_model(args.model, data_conf, args.instance_seg, args.embedding_dim, args.direction_pred, args.angle_class)
     model.load_state_dict(torch.load(args.modelf), strict=False)
     model.cuda()
-    print(eval_iou(model, val_loader))
+    
+    print(eval_iou(model, val_loader)) # 计算交并比
 
 
 if __name__ == '__main__':
@@ -59,7 +74,7 @@ if __name__ == '__main__':
     parser.add_argument("--logdir", type=str, default='./runs')
 
     # nuScenes config
-    parser.add_argument('--dataroot', type=str, default='dataset/nuScenes/')
+    parser.add_argument('--dataroot', type=str, default='/home/innox/Dataset/nuscenes-mini/mini')
     parser.add_argument('--version', type=str, default='v1.0-mini', choices=['v1.0-trainval', 'v1.0-mini'])
 
     # model config
@@ -69,14 +84,14 @@ if __name__ == '__main__':
     parser.add_argument("--nepochs", type=int, default=30)
     parser.add_argument("--max_grad_norm", type=float, default=5.0)
     parser.add_argument("--pos_weight", type=float, default=2.13)
-    parser.add_argument("--bsz", type=int, default=4)
+    parser.add_argument("--bsz", type=int, default=6)
     parser.add_argument("--nworkers", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight_decay", type=float, default=1e-7)
 
     # finetune config
     parser.add_argument('--finetune', action='store_true')
-    parser.add_argument('--modelf', type=str, default=None)
+    parser.add_argument('--modelf', type=str, default="./runs/model29.pt")
 
     # data config
     parser.add_argument("--thickness", type=int, default=5)

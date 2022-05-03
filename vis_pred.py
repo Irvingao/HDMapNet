@@ -102,7 +102,7 @@ if __name__ == '__main__':
     parser.add_argument("--logdir", type=str, default='./runs')
 
     # nuScenes config
-    parser.add_argument('--dataroot', type=str, default='dataset/nuScenes/')
+    parser.add_argument('--dataroot', type=str, default='/home/innox/Dataset/nuscenes-mini/mini')
     parser.add_argument('--version', type=str, default='v1.0-mini', choices=['v1.0-trainval', 'v1.0-mini'])
 
     # model config
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
     # finetune config
     parser.add_argument('--finetune', action='store_true')
-    parser.add_argument('--modelf', type=str, default=None)
+    parser.add_argument('--modelf', type=str, default="./runs/model29.pt")
 
     # data config
     parser.add_argument("--thickness", type=int, default=5)
@@ -130,13 +130,13 @@ if __name__ == '__main__':
     parser.add_argument("--dbound", nargs=3, type=float, default=[4.0, 45.0, 1.0])
 
     # embedding config
-    parser.add_argument('--instance_seg', action='store_true')
+    parser.add_argument('--instance_seg', action='store_true',default=True)
     parser.add_argument("--embedding_dim", type=int, default=16)
     parser.add_argument("--delta_v", type=float, default=0.5)
     parser.add_argument("--delta_d", type=float, default=3.0)
 
     # direction config
-    parser.add_argument('--direction_pred', action='store_true')
+    parser.add_argument('--direction_pred', action='store_true', default=True)
     parser.add_argument('--angle_class', type=int, default=36)
 
     # loss config
