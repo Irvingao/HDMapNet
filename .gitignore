@@ -28,4 +28,7 @@ __pycache__/
 *.ply
 *.zip
 
+# project
 runs
+*.pt
+*.jpg

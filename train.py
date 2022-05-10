@@ -1,4 +1,5 @@
 import os
+from mmcv.cnn.bricks.registry import TRANSFORMER_LAYER
 import numpy as np
 import sys
 import logging
@@ -23,6 +24,22 @@ def write_log(writer, ious, title, counter):
 
     for i, iou in enumerate(ious):
         writer.add_scalar(f'{title}/class_{i}/iou', iou, counter)
+
+
+from torchvision.utils import make_grid
+from vis_pred import post_process
+def decode_seg_map_sequence(semantic):
+    '''
+    Args:
+        semantic (Tensor): [B,N,W,H]
+        semantic_gt (Tensor): [B,N,W,H]
+    
+    Return:
+        - masks (Tensor): [B,3,W,H]
+    '''
+    masks = post_process(semantic)
+    semantic = torch.from_numpy(np.array(masks).transpose([0, 3, 1, 2]))
+    return semantic
 
 
 def train(args):
@@ -53,6 +70,7 @@ def train(args):
     model = get_model(args.model, data_conf, args.instance_seg, args.embedding_dim, args.direction_pred, args.angle_class)
 
     if args.finetune:
+        print("finetune")
         model.load_state_dict(torch.load(args.modelf), strict=False)
         for name, param in model.named_parameters():
             if 'bevencode.up' in name or 'bevencode.layer3' in name:
@@ -71,10 +89,12 @@ def train(args):
 
     model.train()
     counter = 0
-    last_idx = len(train_loader) - 1
+    batch_time = 0
+    last_idx = len(train_loader)
     for epoch in range(args.nepochs):
         for batchi, (imgs, trans, rots, intrins, post_trans, post_rots, lidar_data, lidar_mask, car_trans,
                      yaw_pitch_roll, semantic_gt, instance_gt, direction_gt) in enumerate(train_loader):
+            batchi += 1
             t0 = time()
             opt.zero_grad()
 
@@ -106,19 +126,23 @@ def train(args):
             final_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             opt.step()
+            
             counter += 1
-            t1 = time()
-
+            batch_time = ((time()-t0) + batch_time) /2 if batch_time != 0 else (time()-t0)
+            m, s = divmod(batch_time*((args.nepochs-epoch)*len(train_loader)-batchi), 60)
+            h, m = divmod(m, 60)
+            
             if counter % 10 == 0:
                 intersects, union = get_batch_iou(onehot_encoding(semantic), semantic_gt)
                 iou = intersects / (union + 1e-7)
                 logger.info(f"TRAIN[{epoch:>3d}]: [{batchi:>4d}/{last_idx}]    "
-                            f"Time: {t1-t0:>7.4f}    "
                             f"Loss: {final_loss.item():>7.4f}    "
-                            f"IOU: {np.array2string(iou[1:].numpy(), precision=3, floatmode='fixed')}")
+                            f"IOU: {np.array2string(iou[1:].numpy(), precision=4, floatmode='fixed')}    "
+                            f"Etc time: {int(h)}:{int(m)}:{int(s)}"
+                            )
 
                 write_log(writer, iou, 'train', counter)
-                writer.add_scalar('train/step_time', t1 - t0, counter)
+                writer.add_scalar('train/step_time', batch_time, counter)
                 writer.add_scalar('train/seg_loss', seg_loss, counter)
                 writer.add_scalar('train/var_loss', var_loss, counter)
                 writer.add_scalar('train/dist_loss', dist_loss, counter)
@@ -126,6 +150,17 @@ def train(args):
                 writer.add_scalar('train/direction_loss', direction_loss, counter)
                 writer.add_scalar('train/final_loss', final_loss, counter)
                 writer.add_scalar('train/angle_diff', angle_diff, counter)
+                # 图像
+                semantic = torch.max(semantic, 1)[1].detach().cpu().numpy()
+                semantic_gt = torch.max(semantic_gt, 1)[1].detach().cpu().numpy()
+                
+                grid_image = make_grid(imgs.cpu()[0], 3, normalize=True)
+                writer.add_image('Multi-view-Image', grid_image, counter)
+                grid_image = make_grid([decode_seg_map_sequence(semantic)[0]], 3, normalize=True, value_range=(0, 1))
+                writer.add_image('Predicted_label', grid_image, counter)
+                grid_image = make_grid([decode_seg_map_sequence(semantic_gt)[0]], 3, normalize=True, value_range=(0, 1))
+                writer.add_image('Groundtruth_label', grid_image, counter)
+                        
 
         iou = eval_iou(model, val_loader)
         logger.info(f"EVAL[{epoch:>2d}]:    "
@@ -150,10 +185,11 @@ if __name__ == '__main__':
     parser.add_argument('--version', type=str, default='v1.0-mini', choices=['v1.0-trainval', 'v1.0-mini'])
 
     # model config
-    parser.add_argument("--model", type=str, default='HDMapNet_cam')
+    # parser.add_argument("--model", type=str, default='HDMapNet_cam')
+    parser.add_argument("--model", type=str, default='HDMapNet_Transformer')
 
     # training config
-    parser.add_argument("--nepochs", type=int, default=30)
+    parser.add_argument("--nepochs", type=int, default=20)
     parser.add_argument("--max_grad_norm", type=float, default=5.0)
     parser.add_argument("--pos_weight", type=float, default=2.13)
     parser.add_argument("--bsz", type=int, default=4)
@@ -162,8 +198,8 @@ if __name__ == '__main__':
     parser.add_argument("--weight_decay", type=float, default=1e-7)
 
     # finetune config
-    parser.add_argument('--finetune', action='store_true')
-    parser.add_argument('--modelf', type=str, default=None)
+    parser.add_argument('--finetune', action='store_true', default=False)
+    parser.add_argument('--modelf', type=str, default="./model_10.pt")
 
     # data config
     parser.add_argument("--thickness", type=int, default=5)

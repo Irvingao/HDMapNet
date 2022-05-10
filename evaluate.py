@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
     # finetune config
     parser.add_argument('--finetune', action='store_true')
-    parser.add_argument('--modelf', type=str, default="./runs/model29.pt")
+    parser.add_argument('--modelf', type=str, default=None)
 
     # data config
     parser.add_argument("--thickness", type=int, default=5)

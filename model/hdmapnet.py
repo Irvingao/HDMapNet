@@ -4,7 +4,7 @@ from torch import nn
 from .homography import bilinear_sampler, IPM
 from .utils import plane_grid_2d, get_rot_2d, cam_to_pixel
 from .pointpillar import PointPillarEncoder
-from .base import CamEncode, BevEncode
+from .base import CamEncode, BevEncode, BevTransformerEncoder
 from data.utils import gen_dx_bx
 
 
@@ -38,7 +38,7 @@ class ViewTransformation(nn.Module):
 
 
 class HDMapNet(nn.Module):
-    def __init__(self, data_conf, instance_seg=True, embedded_dim=16, direction_pred=True, direction_dim=36, lidar=False):
+    def __init__(self, data_conf, instance_seg=True, embedded_dim=16, direction_pred=True, direction_dim=36, lidar=False, transformer=False):
         super(HDMapNet, self).__init__()
         self.camC = 64
         self.downsample = 16
@@ -63,9 +63,11 @@ class HDMapNet(nn.Module):
         if lidar:
             self.pp = PointPillarEncoder(128, data_conf['xbound'], data_conf['ybound'], data_conf['zbound'])
             self.bevencode = BevEncode(inC=self.camC+128, outC=data_conf['num_channels'], instance_seg=instance_seg, embedded_dim=embedded_dim, direction_pred=direction_pred, direction_dim=direction_dim+1)
+        elif transformer:
+            self.bevencode = BevTransformerEncoder(inC=self.camC, outC=data_conf['num_channels'], num_layers=6, n_heads=8)
         else:
             self.bevencode = BevEncode(inC=self.camC, outC=data_conf['num_channels'], instance_seg=instance_seg, embedded_dim=embedded_dim, direction_pred=direction_pred, direction_dim=direction_dim+1)
-
+        
     def get_Ks_RTs_and_post_RTs(self, intrins, rots, trans, post_rots, post_trans):
         B, N, _, _ = intrins.shape # 内参的shape
         Ks = torch.eye(4, device=intrins.device).view(1, 1, 4, 4).repeat(B, N, 1, 1)
@@ -98,3 +100,6 @@ class HDMapNet(nn.Module):
             lidar_feature = self.pp(lidar_data, lidar_mask)
             topdown = torch.cat([topdown, lidar_feature], dim=1)
         return self.bevencode(topdown)
+
+
+    

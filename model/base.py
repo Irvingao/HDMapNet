@@ -2,8 +2,14 @@ import torch
 import torch.nn as nn
 
 from efficientnet_pytorch import EfficientNet
+from torch.nn.functional import dropout
 from torchvision.models.resnet import resnet18
 
+from .bev_deformable_attention import BEVDeformableTransformerEncoder
+# import sys
+# import os
+# sys.path.append(os.path.abspath(__file__))
+# from bev_deformable_attention import BEVDeformableTransformerEncoder
 
 class Up(nn.Module):
     def __init__(self, in_channels, out_channels, scale_factor=2):
@@ -113,17 +119,19 @@ class BevEncode(nn.Module):
             )
 
     def forward(self, x):
-        # print(f"1: {x.shape}")
-
+        print(f"1: {x.shape}")
+        # x: ([B, 64, 200, 400])
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-
+        # x: ([B, 64, 100, 200])
         x1 = self.layer1(x)
+        # print(f"2: {x1.shape}")
+        # x1: ([B, 64, 100, 200])
         x = self.layer2(x1)
         x2 = self.layer3(x)
-        # print(f"2: {x.shape}")
-
+        # x2:([B, 256, 25, 50])
+        # print(f"3: {x2.shape}")
         x = self.up1(x2, x1)
         
         x = self.up2(x)
@@ -143,3 +151,105 @@ class BevEncode(nn.Module):
         # print(f"3: {x.shape}")
         # input()
         return x, x_embedded, x_direction
+
+class BevTransformerEncoder(nn.Module):
+    def __init__(self, inC, outC, num_layers=6, dropout=0.1, d_tf=256,
+                 n_heads=8,instance_seg=True, embedded_dim=16, 
+                 direction_pred=True, direction_dim=37):
+        super(BevTransformerEncoder, self).__init__()
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(inC, 64, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, d_tf, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(d_tf),
+            nn.ReLU()
+        )
+
+        self.bev_transformer = BEVDeformableTransformerEncoder(num_layers,d_model=d_tf,dropout=dropout,activation="relu", n_heads=n_heads)
+        
+        self.up1 = Up(64 + d_tf, 256, scale_factor=4)
+        self.up2 = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear',
+                        align_corners=True),
+            nn.Conv2d(256, 128, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, outC, kernel_size=1, padding=0),
+        )
+
+        self.instance_seg = instance_seg
+        if instance_seg:
+            self.up1_embedded = Up(64 + 256, 256, scale_factor=4)
+            self.up2_embedded = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='bilinear',
+                            align_corners=True),
+                nn.Conv2d(256, 128, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, embedded_dim, kernel_size=1, padding=0),
+            )
+
+        self.direction_pred = direction_pred
+        if direction_pred:
+            self.up1_direction = Up(64 + 256, 256, scale_factor=4)
+            self.up2_direction = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='bilinear',
+                            align_corners=True),
+                nn.Conv2d(256, 128, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, direction_dim, kernel_size=1, padding=0),
+            )
+    
+    def forward(self, x):
+        # print(f"1: {x.shape}")
+        x1 = self.conv1(x)
+        x = self.conv2(x1)
+        # print(f"2: {x1.shape}")
+        
+        x2 = self.bev_transformer(x)
+        # print(f"3: {x2.shape}")
+        
+        x = self.up1(x2, x1)
+        
+        x = self.up2(x)
+
+        if self.instance_seg:
+            x_embedded = self.up1_embedded(x2, x1)
+            x_embedded = self.up2_embedded(x_embedded)
+        else:
+            x_embedded = None
+
+        if self.direction_pred:
+            x_direction = self.up1_embedded(x2, x1)
+            x_direction = self.up2_direction(x_direction)
+        else:
+            x_direction = None
+        
+        # print(f"3: {x.shape}")
+        # input()
+        return x, x_embedded, x_direction
+
+    
+    
+if __name__ == '__main__':
+    in_c = 64
+    model = BevTransformerEncoder(in_c, 4, num_layers=6, d_tf=256,n_heads=1)
+    model.cuda()
+    
+    x = torch.randn(1, in_c, 200, 400).cuda()
+    print(model(x)[0].shape) 
+    
+    
+    # model = BevEncode(in_c, 4)
+    # model.cuda()
+    # x = torch.randn(1, in_c, 200, 400).cuda()
+    # print(model(x)[0].shape) 
+    

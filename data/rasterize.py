@@ -1,4 +1,5 @@
 import cv2
+from matplotlib.pyplot import pause
 import numpy as np
 
 import torch
@@ -45,6 +46,9 @@ def mask_for_lines(lines, mask, thickness, idx, type='index', angle_class=36):
 
 
 def line_geom_to_mask(layer_geom, confidence_levels, local_box, canvas_size, thickness, idx, type='index', angle_class=36):
+    '''
+    draw geomtry line to mask
+    '''
     patch_x, patch_y, patch_h, patch_w = local_box
 
     patch = get_patch_coord(local_box)
@@ -121,7 +125,35 @@ def preprocess_map(vectors, patch_size, canvas_size, num_classes, thickness, ang
     instance_masks = overlap_filter(instance_masks, filter_masks)
     forward_masks = overlap_filter(forward_masks, filter_masks).sum(0).astype('int32')
     backward_masks = overlap_filter(backward_masks, filter_masks).sum(0).astype('int32')
-
+    # ##################
+    '''label_colors = np.array([
+        [255, 255, 255],
+        [128, 64, 128],
+        [244, 35, 232],
+        [70, 70, 70],
+        [102, 102, 156],
+        [190, 153, 153],
+        ])
+    mask = map_mask
+    r = mask.copy()
+    g = mask.copy()
+    b = mask.copy()
+    rgb = np.ones((mask.shape[0], mask.shape[1], 3)) # 创建一个全白矩阵(保证没类别的地方都是白色，方便查看效果)
+    for idx, color in enumerate(label_colors):
+        r[r == idx] = color[0]
+        g[g == idx] = color[1]
+        b[b == idx] = color[2]
+    
+    rgb[:, :, 0] = r / 255.0
+    rgb[:, :, 1] = g / 255.0
+    rgb[:, :, 2] = b / 255.0
+    img = rgb.astype(np.float)
+    import matplotlib.pyplot as plt
+    plt.figure("Image") # 图像窗口名称
+    plt.subplot(1,1,1), plt.title('image')
+    plt.imshow(img, vmin=0, vmax=1), plt.axis('off')
+    plt.show()'''
+    # ##################
     return torch.tensor(instance_masks), torch.tensor(forward_masks), torch.tensor(backward_masks)
 
 

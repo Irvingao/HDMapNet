@@ -1,8 +1,9 @@
 import argparse
 import numpy as np
 from PIL import Image
-
+import cv2
 import matplotlib.pyplot as plt
+from numpy.lib.function_base import append
 
 import tqdm
 import torch
@@ -12,6 +13,14 @@ from data.const import NUM_CLASSES
 from model import get_model
 from postprocess.vectorize import vectorize
 
+label_colors = np.array([
+        [255, 255, 255],
+        [128, 64, 128],
+        [244, 35, 232],
+        [70, 70, 70],
+        [102, 102, 156],
+        [190, 153, 153],
+        ])
 
 def onehot_encoding(logits, dim=1):
     max_idx = torch.argmax(logits, dim, keepdim=True)
@@ -20,6 +29,29 @@ def onehot_encoding(logits, dim=1):
     return one_hot
 
 
+def decode_segmap(mask):
+    '''
+    
+    '''
+    rgb_mask_list = [mask.copy() for i in range(3)]
+    rgb = np.ones((mask.shape[0], mask.shape[1], 3)) # create an empty rgb image to save clorized masks
+    for idx, single_mask in enumerate(rgb_mask_list):
+        for idx_c, color in enumerate(label_colors):
+            rgb_mask_list[idx][single_mask == idx_c] = color[idx] # colorize pixels if the value is equal to the class num
+        rgb[:, :, idx] = rgb_mask_list[idx] / 255.0 # rgb = [r, g, b]
+    return rgb.astype(np.float)
+
+def post_process(semantic):
+    '''
+    imgs (list): [B, C, W, H]
+    semantic_res (list): [B, N, W, H]
+    '''
+    B, W, H = semantic.shape
+    mask_images = np.zeros(shape=(B,W, H,3)) # create empty batch iamges to save colorized masks
+    for i in range(semantic.shape[0]):
+        mask_images[i] = decode_segmap(semantic[i]) # mask to rgb
+    return mask_images
+    
 def vis_segmentation(model, val_loader):
     model.eval()
     with torch.no_grad():
@@ -28,14 +60,38 @@ def vis_segmentation(model, val_loader):
             semantic, embedding, direction = model(imgs.cuda(), trans.cuda(), rots.cuda(), intrins.cuda(),
                                                 post_trans.cuda(), post_rots.cuda(), lidar_data.cuda(),
                                                 lidar_mask.cuda(), car_trans.cuda(), yaw_pitch_roll.cuda())
-            semantic = semantic.softmax(1).cpu().numpy()
-            semantic[semantic_gt < 0.1] = np.nan
+            
+            semantic = torch.max(semantic, 1)[1].detach().cpu().numpy()
+            semantic_gt = torch.max(semantic_gt, 1)[1].detach().cpu().numpy()
+            
+            plt.figure("Image") # 图像窗口名称
+            print(semantic.shape)
+            img = post_process(semantic)
+            gt = post_process(semantic_gt)
+            
+            plt.subplot(1,2,1), plt.title('image')
+            plt.imshow(img[0], vmin=0, vmax=1), plt.axis('off')
+            plt.subplot(1,2,2), plt.title('gt')
+            plt.imshow(gt[0], vmin=0, vmax=1), plt.axis('off')
+            
+            # print("img:", img[0].shape)
+            # plt.imshow(img[0])
+            # # plt.imshow(img[0], vmin=0, cmap='Blues', vmax=1, alpha=0.6)
+            # plt.axis('on') # 关掉坐标轴为 off
+            # plt.title('image') # 图像题目
+            plt.show()
 
+            print(semantic.shape)
+            print(semantic_gt.shape)
+            # input()
+            '''
+            semantic = semantic_res.softmax(1).cpu().numpy()
+            semantic[semantic_gt < 0.1] = np.nan
             for si in range(semantic.shape[0]):
                 plt.figure(figsize=(4, 2))
                 plt.imshow(semantic[si][1], vmin=0, cmap='Blues', vmax=1, alpha=0.6)
                 plt.imshow(semantic[si][2], vmin=0, cmap='Reds', vmax=1, alpha=0.6)
-                plt.imshow(semantic[si][3], vmin=0, cmap='Greens', vmax=1, alpha=0.6)
+                plt.imshow(semantic[si][3], vmin=0, cmap='Greens', vmax=1, alpha=1)
 
                 # fig.axes.get_xaxis().set_visible(False)
                 # fig.axes.get_yaxis().set_visible(False)
@@ -45,9 +101,12 @@ def vis_segmentation(model, val_loader):
 
                 imname = f'eval{batchi:06}_{si:03}.jpg'
                 print('saving', imname)
+                plt.show()
+                plt.figimage()
                 plt.savefig(imname)
-                plt.close()
-
+                # plt.close()
+            '''
+            
 
 def vis_vector(model, val_loader, angle_class):
     model.eval()
@@ -89,11 +148,12 @@ def main(args):
     }
 
     train_loader, val_loader = semantic_dataset(args.version, args.dataroot, data_conf, args.bsz, args.nworkers)
+    print("finish loader.")
     model = get_model(args.model, data_conf, args.instance_seg, args.embedding_dim, args.direction_pred, args.angle_class)
     model.load_state_dict(torch.load(args.modelf), strict=False)
     model.cuda()
-    vis_vector(model, val_loader, args.angle_class)
-    # vis_segmentation(model, val_loader)
+    # vis_vector(model, val_loader, args.angle_class)
+    vis_segmentation(model, val_loader)
 
 
 if __name__ == '__main__':
@@ -119,7 +179,7 @@ if __name__ == '__main__':
 
     # finetune config
     parser.add_argument('--finetune', action='store_true')
-    parser.add_argument('--modelf', type=str, default="./runs/model29.pt")
+    parser.add_argument('--modelf', type=str, default="./model29.pt")
 
     # data config
     parser.add_argument("--thickness", type=int, default=5)

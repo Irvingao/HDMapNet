@@ -147,6 +147,8 @@ class HDMapNetDataset(Dataset):
 
     def get_vectors(self, rec):
         location = self.nusc.get('log', self.nusc.get('scene', rec['scene_token'])['log_token'])['location']
+        # print("location in get_vectors:", location)
+        # input()
         ego_pose = self.nusc.get('ego_pose', self.nusc.get('sample_data', rec['data']['LIDAR_TOP'])['ego_pose_token'])
         vectors = self.vector_map.gen_vectorized_samples(location, ego_pose['translation'], ego_pose['rotation'])
         return vectors
